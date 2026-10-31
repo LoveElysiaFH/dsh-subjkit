@@ -1,0 +1,6 @@
+# Python 依赖（Windows / Python 3.10+）
+matplotlib>=3.8
+numpy>=1.26
+pypdf>=5.0
+pymupdf>=1.24
+rdkit>=2024.3

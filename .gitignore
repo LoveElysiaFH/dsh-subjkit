@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+node_modules/
+示例/输出/
+*.log
+.DS_Store
+Thumbs.db

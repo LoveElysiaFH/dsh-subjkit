@@ -1,0 +1,11 @@
+{
+  "name": "dsh-subjkit",
+  "description": "学科公式矢量排版、试卷 PDF 与各科图示；图示 spec 中文校验，检查分 paper/report。",
+  "version": "0.3.0",
+  "entry": {
+    "name": "dsh-subjkit",
+    "inject": [
+      "tools"
+    ]
+  }
+}

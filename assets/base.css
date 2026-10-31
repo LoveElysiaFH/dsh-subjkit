@@ -1,0 +1,106 @@
+/* 学科工具 · 打印基础样式（A4） */
+@page { size: A4; margin: 14mm 14mm 12mm 14mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "SimSun", "Noto Serif SC", "Songti SC", serif;
+  font-size: 10.5pt;
+  line-height: 1.65;
+  color: #000;
+  text-align: justify;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: "SimHei", "Noto Sans SC", sans-serif;
+  font-weight: normal;
+  color: #000;
+  line-height: 1.35;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+h1 { font-size: 16pt; text-align: center; margin: 0 0 2mm; }
+h2 {
+  font-size: 12pt; margin: 5mm 0 2mm; padding: 1.2mm 2.5mm;
+  background: #ececec; border-left: 4px solid #333;
+}
+h3 { font-size: 11pt; margin: 3.5mm 0 1.5mm; }
+h4 { font-size: 10.5pt; margin: 3mm 0 1mm; }
+p { margin: 0 0 2.2mm; }
+strong, b { font-family: "SimHei", "Noto Sans SC", sans-serif; font-weight: normal; }
+em, i { font-style: normal; text-decoration: underline; text-underline-offset: 2px; }
+ul, ol { margin: 0 0 2.2mm; padding-left: 7mm; }
+li { margin: 0.6mm 0; }
+blockquote {
+  margin: 2mm 0; padding: 1.8mm 3mm; background: #f7f7f7;
+  border-left: 3px solid #999; color: #222;
+}
+blockquote p:last-child { margin-bottom: 0; }
+code {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 9pt; background: #f2f2f2; padding: 0 1mm; border-radius: 1mm;
+}
+pre {
+  background: #f5f5f5; border: 1px solid #ddd; padding: 2mm 3mm;
+  white-space: pre-wrap; font-size: 9pt; line-height: 1.5;
+}
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 1.5mm 0 3mm; break-inside: auto; }
+/* 长表格允许跨页，但表头在每页重复，且不把一行劈成两半 */
+thead { display: table-header-group; }
+tfoot { display: table-footer-group; }
+tbody tr, thead tr { break-inside: avoid; page-break-inside: avoid; }
+th, td { border: 1px solid #000; padding: 0.9mm 1.2mm; font-size: 9.5pt; text-align: center; vertical-align: middle; }
+th { background: #f2f2f2; font-family: "SimHei", "Noto Sans SC", sans-serif; font-weight: normal; }
+/* 整块不跨页：表格/图/段落外面套一层 <div class="keep">，或写 <!--keep--> 让下一块自动套 */
+.keep { break-inside: avoid; page-break-inside: avoid; }
+img { max-width: 100%; height: auto; }
+hr { border: none; border-top: 1px solid #999; margin: 3mm 0; }
+
+/* ---------- MathJax ---------- */
+mjx-container[jax="SVG"] { display: inline-block; line-height: normal; max-width: 100%; }
+mjx-container[jax="SVG"][display="true"] {
+  display: block; text-align: center; margin: 2.6mm 0;
+  break-inside: avoid; page-break-inside: avoid;
+}
+mjx-container[jax="SVG"] svg { max-width: 100%; height: auto; }
+.math-error {
+  color: #c00; background: #ffecec; border: 1px dashed #c00;
+  padding: 0 1mm; font-size: 9pt;
+}
+
+/* ---------- 试卷常用块 ---------- */
+.banner {
+  text-align: center; font-family: "SimHei", "Noto Sans SC", sans-serif;
+  font-size: 10pt; border: 1.4pt solid #000; padding: 1.6mm;
+  margin-bottom: 3mm; letter-spacing: 1px;
+}
+.sub { text-align: center; font-size: 9pt; color: #333; margin: -1mm 0 3mm; }
+.q { margin: 0 0 4mm; break-inside: avoid; page-break-inside: avoid; }
+.qno { font-family: "SimHei", "Noto Sans SC", sans-serif; }
+.pts { font-size: 9pt; color: #555; }
+.opts { margin: 1mm 0 0 6mm; }
+.opts > div { margin: 0.4mm 0; }
+.fill { margin: 1.5mm 0 0 6mm; }
+.line { display: inline-block; border-bottom: 1px solid #000; min-width: 40mm; }
+.work {
+  border: 1px dotted #999; margin: 1.5mm 0 0 6mm;
+  break-inside: avoid; page-break-inside: avoid;
+}
+.work .hint { font-size: 8.5pt; color: #bbb; padding: 1mm 2mm; }
+.note {
+  font-size: 8.6pt; color: #444; background: #f7f7f7;
+  border: 1px dashed #999; padding: 2mm 2.5mm; margin: 2mm 0;
+}
+.foot {
+  margin-top: 5mm; font-size: 8.8pt; color: #666;
+  border-top: 1px solid #bbb; padding-top: 2mm;
+}
+.answer { color: #b00; }
+.small { font-size: 8.8pt; }
+.center { text-align: center; }
+.pagebreak { break-after: page; page-break-after: always; height: 0; }
+
+/* 选项四栏（英语/化学选择题） */
+.opts-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 3mm; margin-left: 6mm; }
+@media print { .q, pre, blockquote, .keep, mjx-container[display="true"] { break-inside: avoid; } }

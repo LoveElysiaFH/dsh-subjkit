@@ -1,0 +1,77 @@
+{
+  "name": "dsh-subjkit",
+  "version": "0.3.0",
+  "private": true,
+  "description": "DSH 学科插件：公式矢量排版、试卷 PDF、物理/数学/化学/生物/语文图示；图示 spec 带中文校验，check 分 paper/report。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "math",
+    "physics",
+    "chemistry",
+    "education",
+    "mathjax",
+    "matplotlib"
+  ],
+  "type": "module",
+  "homepage": "https://github.com/LoveElysiaFH/dsh-subjkit#readme",
+  "bugs": {
+    "url": "https://github.com/LoveElysiaFH/dsh-subjkit/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LoveElysiaFH/dsh-subjkit.git"
+  },
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "subjkit",
+    "subjkit.py",
+    "assets",
+    "skills",
+    "locale",
+    "icon.svg",
+    "docs",
+    "示例",
+    "tests",
+    "cordis.patch.yml",
+    "dsh.plugin.json",
+    "install.py",
+    "requirements.txt",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "doctor": "python subjkit.py doctor",
+    "test": "python tests/test_all.py",
+    "check": "node tests/plugin_smoke.mjs",
+    "verify": "node tests/plugin_smoke.mjs && python tests/test_all.py"
+  },
+  "dependencies": {
+    "mathjax-full": "3.2.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": ">=0.2.1-rc.5"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
