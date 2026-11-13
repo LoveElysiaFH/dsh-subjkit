@@ -1,6 +1,6 @@
 {
   "name": "dsh-subjkit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "DSH 学科插件：公式矢量排版、试卷 PDF、物理/数学/化学/生物/语文图示；图示 spec 带中文校验，check 分 paper/report。",
   "keywords": [

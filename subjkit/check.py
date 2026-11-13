@@ -55,6 +55,13 @@ SUGGEST = {
 # 这些符号在中文正文里很常见，但也可能是合法用法（如“×”表示乘号、°C），仍提示，交给会话判断。
 WARN_ONLY = set("×÷·°′″→←↔")
 
+# 比较/关系符号：既可能是数学式，也可能是散文里的「至少 / 不超过 / 约等于」。
+# 判据看上下文——两边都是汉字（或一侧是行首/空白）就按散文处理，只提示不拦截。
+PROSE_RELATIONS = set("≤≥≠≈≡∼∽")
+
+# 汉字与中文标点：出现在符号两侧说明这是行文，不是公式
+_PROSE = re.compile(r"[\u3000-\u303f\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]")
+
 PROFILES = {
     "paper": "出卷/讲义：一切像公式但没包 $...$ 的写法都要改",
     "report": "数据报告：纯数字比值与行文箭头只提示，不计为错误",
@@ -88,7 +95,25 @@ FRACTION_RE = re.compile(r"(?<![\w/])(\d+|[a-zA-Z])\s*/\s*(\d+|[a-zA-Z])(?![\w/]
 POWER_RE = re.compile(r"(?<![\\\w])([a-zA-Z])\s*\^\s*(\d+)(?![\w{])")
 
 
-def _level(profile: str, kind: str, char: str, is_numeric_ratio: bool) -> str:
+def _in_prose(line: str, idx: int) -> bool:
+    """符号是不是出现在行文里（按**左侧**最近的可见字符判断）。
+
+    `用时 ≥ 20 分钟`、`成绩≤90`、`（≥60 分）` → True：左边是汉字/中文标点，是散文用法
+    `当 x ≥ 1 时`（左边是变量 x）、`≥20`（行首，没有上下文） → False：按公式处理
+
+    只看左侧是有意的：`≥ 20 分钟` 右边虽数字，但「20 分钟」是数量不是变量，
+    真正能区分「公式 / 行文」的是它**前面**写的是不是汉字。
+    """
+    j = idx - 1
+    while j >= 0 and line[j] in " \t　":
+        j -= 1
+    if j < 0:
+        return False
+    return _PROSE.match(line[j]) is not None
+
+
+def _level(profile: str, kind: str, char: str, is_numeric_ratio: bool,
+           prose: bool = False) -> str:
     """按 profile 给一条发现定级。paper 严、report 松，但都不会静默丢。"""
     if profile == "report":
         if kind == "分数" and is_numeric_ratio:
@@ -100,7 +125,12 @@ def _level(profile: str, kind: str, char: str, is_numeric_ratio: bool) -> str:
         return "warn"
     # paper：出卷时这些都该改
     if kind == "符号":
-        return "warn" if char in WARN_ONLY else "error"
+        if char in WARN_ONLY:
+            return "warn"
+        # 「用时 ≥ 20 分钟」这种散文里的比较词，提示即可，不该拦住整份 PDF
+        if prose and char in PROSE_RELATIONS:
+            return "warn"
+        return "error"
     if kind == "分数":
         return "warn" if is_numeric_ratio else "error"
     return "warn"              # 幂
@@ -125,15 +155,21 @@ def scan(text: str, profile: str = "paper", exclude_ratios: bool = False) -> lis
             if ch in SUGGEST:
                 hits.setdefault(ch, []).append(col)
         for ch, cols in hits.items():
+            # 同一个符号在一行里可能出现多次：只要有一次是公式语境，就按最严的算
+            prose_flags = [_in_prose(line, c - 1) for c in cols]
+            levels = [_level(profile, "符号", ch, False, prose=p) for p in prose_flags]
+            level = "error" if "error" in levels else ("warn" if "warn" in levels else "info")
+            prose = all(prose_flags)
             findings.append({
                 "line": lineno,
                 "col": cols[0],
                 "char": ch,
                 "count": len(cols),
                 "suggest": SUGGEST[ch],
-                "warning_only": ch in WARN_ONLY,
+                "warning_only": ch in WARN_ONLY or (prose and ch in PROSE_RELATIONS),
                 "kind": "符号",
-                "level": _level(profile, "符号", ch, False),
+                "level": level,
+                "prose": prose,
                 "source": src_lines[lineno - 1].strip()[:120],
             })
 
@@ -194,9 +230,16 @@ def report(
     if not findings:
         return "✔ 未发现裸数学符号：正文里的公式都应已包在 $...$ 或 $$...$$ 中。"
 
-    head = (f"发现 {c['total']} 处（error {c['error']} / warn {c['warn']} / info {c['info']}）"
-            + (f"　profile={profile}" if profile != "paper" else "")
-            + (f"（{path}）" if path else "") + "：\n")
+    # 第一行先回答「会不会被拦」——error 和 warn 混在一张表里，
+    # 使用者最常误读的就是「我被 warn 拦住了」。
+    head = (
+        f"error {c['error']} 处（{'会拦截出 PDF' if c['error'] else '不拦截'}）"
+        f"｜warn {c['warn']} 处（不拦截，可改可不改）"
+        f"｜info {c['info']} 处（提示）\n"
+        f"发现 {c['total']} 处"
+        + (f"　profile={profile}" if profile != "paper" else "")
+        + (f"（{path}）" if path else "") + "：\n"
+    )
 
     # info 太多时只给数量，避免把有用的 error 淹掉
     show = findings

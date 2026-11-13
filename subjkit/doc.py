@@ -50,8 +50,15 @@ def edge_exe() -> str:
     raise RuntimeError("找不到 Microsoft Edge；可用 --html 只生成 HTML，或安装 Edge")
 
 
-def read_css() -> str:
-    return BASE_CSS.read_text(encoding="utf-8")
+def read_css(path: str | Path | None = None) -> str:
+    """读打印样式。
+
+    用 `utf-8-sig` 读：CSS 里一旦混进 BOM，`<style>` 中段出现 U+FEFF 会让浏览器
+    丢掉**其后所有规则**，表现是「皮肤没装上」——而用 PowerShell
+    `Set-Content -Encoding UTF8` 改一次就会带上 BOM。这里自动剥掉，永久免疫。
+    """
+    target = Path(path) if path is not None else BASE_CSS
+    return target.read_text(encoding="utf-8-sig")
 
 
 def render_math_html(html_in: Path, html_out: Path) -> dict:
@@ -77,9 +84,52 @@ def render_math_html(html_in: Path, html_out: Path) -> dict:
     return report
 
 
+def _dir_state(path: Path) -> str:
+    """输出目录可写性，失败时和报错一起给出——省得下一个人去调 Edge 参数。"""
+    parent = path.parent
+    if not parent.exists():
+        return f"输出目录：{parent}（不存在）"
+    return f"输出目录：{parent}（存在，{'可写' if os.access(parent, os.W_OK) else '不可写'}）"
+
+
+def _pdf_failure_message(pdf_path: Path, work: Path, returncode: int | None,
+                         stderr: str | None) -> str:
+    """组装 Edge 没出 PDF 时的诊断信息。
+
+    Edge 在**输出路径写不进去**时也会 exit=0 且不写文件，只在 stderr 里留一行
+    `Failed to write`。所以这里必须把 stderr 全带上，并显式给出目录状态，
+    否则拿到 `exit=0` 的人只会在参数里空找。
+    """
+    detail = (stderr or "").strip()
+    lines = [
+        f"Edge 没有生成 PDF（exit={returncode}）。",
+        f"  输出路径：{pdf_path}",
+        f"  {_dir_state(pdf_path)}",
+        f"  临时 user-data-dir：{work}（已确认可写）",
+    ]
+    if detail:
+        lines.append("  Edge stderr：")
+        lines.extend("    " + ln for ln in detail.splitlines()[-30:])
+    else:
+        lines.append("  Edge stderr 是空的——这种情形多半是输出路径写不进去，"
+                     "先查上面那行目录状态，别再调 Edge 参数。")
+    return "\n".join(lines)
+
+
 def html_to_pdf(html_path: Path, pdf_path: Path) -> None:
     work = Path(tempfile.mkdtemp(prefix="kt_edge_"))
     try:
+        # user-data-dir 是这里自己 mkdtemp 的；落在不可写的盘上会静默失败，先自检一次
+        probe = work / ".write-probe"
+        try:
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+        except OSError as e:
+            raise RuntimeError(
+                f"临时目录不可写（{work}）：{e}。Edge 的 --user-data-dir 建在这里，"
+                "写不了就会 exit=0 且不生成 PDF。换个 TMP/TEMP 目录再试。"
+            ) from e
+
         cmd = [edge_exe(), *PDF_ARGS, f"--user-data-dir={work / 'profile'}",
                f"--print-to-pdf={pdf_path}", html_path.resolve().as_uri()]
         try:
@@ -88,9 +138,11 @@ def html_to_pdf(html_path: Path, pdf_path: Path) -> None:
         except subprocess.TimeoutExpired as e:
             raise RuntimeError("Edge 打印超时（180 秒）") from e
         if not pdf_path.exists() or pdf_path.stat().st_size < 1024:
-            raise RuntimeError(f"Edge 未生成 PDF（exit={proc.returncode}）：{proc.stderr[-600:]}")
+            raise RuntimeError(
+                _pdf_failure_message(pdf_path, work, proc.returncode, proc.stderr)
+            )
         if not pdf_path.read_bytes().startswith(b"%PDF"):
-            raise RuntimeError("Edge 输出不是有效 PDF")
+            raise RuntimeError(f"Edge 输出不是有效 PDF：{pdf_path}（{_dir_state(pdf_path)}）")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

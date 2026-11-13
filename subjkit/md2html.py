@@ -29,17 +29,22 @@ def _is_cjk(ch: str) -> bool:
 
 
 def join_lines(lines: list[str]) -> str:
-    """中文行之间不插空格，英文行之间插一个空格。"""
+    """中文行之间不插空格，英文行之间插一个空格；行尾两个空格 = 硬换行（CommonMark）。
+
+    两个坑都在这里踩过：
+    1. 硬换行要在 **strip 之前**判，否则行尾空格早被吃掉（永远走不到 <br>）；
+    2. `<br>` 属于**上一行**——必须记住上一行有没有两个空格，
+       拿当前行的行尾空格去插，整列换行会错开一行（最后一行常常没有行尾空格）。
+    """
     out = ""
+    br = False                       # 上一行是否以两个空格结尾
     for raw in lines:
-        line = raw.rstrip()
-        hard_break = line.endswith("  ")
-        line = line.strip()
+        line = raw.strip()
         if not line:
             continue
         if not out:
             out = line
-        elif hard_break:
+        elif br:
             out += "<br>" + line
         elif _is_cjk(out[-1]) and _is_cjk(line[0]):
             out += line
@@ -47,6 +52,7 @@ def join_lines(lines: list[str]) -> str:
             out += line
         else:
             out += " " + line
+        br = raw.endswith("  ")
     return out
 
 
@@ -244,15 +250,23 @@ def md_to_html(text: str, base_dir: Path) -> str:
             push(table_html)
             continue
 
-        # 引用
+        # 引用：内容当成一段独立的 Markdown 再解析一遍
+        # （标题、列表、表格、硬换行在引用块里都必须成立；不能把 `##` 原样印出来）
         if s.startswith(">"):
             flush()
             buf = []
-            while i < len(lines) and lines[i].strip().startswith(">"):
-                buf.append(lines[i].strip()[1:].lstrip())
+            while i < len(lines):
+                lead = lines[i].lstrip()
+                if not lead.startswith(">"):
+                    break
+                inner = lead[1:]
+                if inner.startswith(" "):
+                    inner = inner[1:]
+                buf.append(inner)          # 保留行尾空格，引用块里的硬换行也要生效
                 i += 1
-            body = join_lines(buf)
-            push(f"<blockquote><p>{inline(body, base_dir)}</p></blockquote>")
+            body = md_to_html("\n".join(buf), base_dir)
+            if body:
+                push(f"<blockquote>{body}</blockquote>")
             continue
 
         # 列表（同类型连续项）

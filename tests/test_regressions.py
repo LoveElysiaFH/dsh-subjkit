@@ -12,18 +12,20 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from subjkit.check import counts, scan  # noqa: E402
+from subjkit.check import counts, report, scan  # noqa: E402
 from subjkit.diagrams.bio import CELL_LABELS, _place  # noqa: E402
 from subjkit.diagrams.expr import ExprError, normalize_expr  # noqa: E402
 from subjkit.diagrams.figures import prepare, render  # noqa: E402
 from subjkit.diagrams.mathfig import _pick_legend  # noqa: E402
 from subjkit.diagrams.validate import SpecError  # noqa: E402
+from subjkit.doc import _pdf_failure_message, build_pdf, read_css  # noqa: E402
 from subjkit.md2html import build_html, md_to_html  # noqa: E402
 
 OUT = ROOT / "示例" / "输出" / "回归"
@@ -48,6 +50,7 @@ DATA_DOC = "\n".join([
     "| 一班 | 274/450 | 405/600 |",
     "",
     "整体 A → B，误差 ≈ 3%，覆盖率 ≥ 80%。",
+    "判别式 √(b²-4ac)。",
 ])
 
 
@@ -248,6 +251,116 @@ def _p23():
     doc, _meta = build_html(md, ROOT, css, {})
     assert "table-header-group" in doc
     return "thead 重复 + keep 语义"
+
+
+# --------------------------------------------------------------------------
+# 0.3.1 实测反馈（引用块标题 / 硬换行 / 行文比较符 / BOM / 报错可诊断）
+# --------------------------------------------------------------------------
+@case("必修1 引用块里的 ## 按标题渲染，不再原样印出")
+def _b1():
+    md = "\n".join([
+        "> ## ★ 引用块里的二级标题",
+        ">",
+        "> 正文一行。",
+    ])
+    html = md_to_html(md, ROOT)
+    assert "<blockquote>" in html, html
+    assert "<h2>" in html, f"引用块里的标题没被解析：{html}"
+    assert "##" not in html, f"markdown 记号被印到纸上了：{html}"
+    assert "<p>正文一行。</p>" in html, "引用块里的两行不该粘成一段"
+
+    # 引用块里的列表也要成立
+    html2 = md_to_html("> 列表：\n> - 一\n> - 二", ROOT)
+    assert "<ul>" in html2 and "<li>一</li>" in html2, html2
+    return "## → <h2>，段落不再粘连"
+
+
+@case("必修2 行尾两个空格 = 硬换行（不再需要手写 <br>）")
+def _b2():
+    md = "A. 甲选项  \nB. 乙选项  \nC. 丙选项  \nD. 丁选项"
+    html = md_to_html(md, ROOT)
+    assert html.count("<br>") == 3, f"应有 3 个 <br>，实际：{html}"
+    assert "A. 甲选项<br>B. 乙选项" in html
+
+    # 没有行尾空格时仍然合并（中文行之间不插空格）
+    merged = md_to_html("甲行\n乙行", ROOT)
+    assert "<br>" not in merged and "甲行乙行" in merged, merged
+
+    # 引用块里的硬换行也要生效
+    quoted = md_to_html("> 甲  \n> 乙", ROOT)
+    assert "<br>" in quoted, quoted
+    return "3 个 <br>；无空格仍合并；引用块内也生效"
+
+
+@case("必修3 行文里的 ≥ ≤ ≠ 只 warn，不拦 PDF；数学语境仍 error")
+def _b3():
+    prose = scan("用时 ≥ 20 分钟。\n成绩≤90 分。\n（≥60 分）", profile="paper")
+    assert counts(prose)["error"] == 0, f"行文比较符不该拦：{counts(prose)}"
+    assert counts(prose)["warn"] == 3
+
+    math = scan("当 x ≥ 1 时成立。\n≤20", profile="paper")
+    assert counts(math)["error"] == 2, f"变量/行首的 ≥ 仍应 error：{counts(math)}"
+
+    # 混在一份卷子里：只有数学语境那行会拦
+    mixed = scan("用时 ≥ 20 分钟。\n当 x ≥ 1 时成立。", profile="paper")
+    assert counts(mixed)["error"] == 1, counts(mixed)
+    return "行文 3 条 warn / 数学 2 条 error / 混合 1 条 error"
+
+
+@case("必修3 端到端：带「用时 ≥ 20 分钟」的卷子能出 PDF")
+def _b3b():
+    md = "\n".join([
+        "---", "title: 行文符号验收", "---", "",
+        "1. 用时 ≥ 20 分钟。", "", "2. 成绩 ≤ 90 分。",
+    ])
+    src = OUT / "行文符号.md"
+    src.write_text(md, encoding="utf-8")
+    findings = scan(md, profile="paper")
+    assert counts(findings)["error"] == 0, counts(findings)
+    out = OUT / "行文符号.pdf"
+    result = build_pdf(src, out)
+    assert result["pages"] >= 1 and not result["math_errors"]
+    return f"{result['pages']} 页，error 0，正常出图"
+
+
+@case("隐患4 read_css 遇 BOM 自动剥掉（否则整段样式失效）")
+def _b4():
+    tmp = OUT / "bom.css"
+    tmp.write_bytes("\ufeffbody{font-size:12pt}\n.keep{break-inside:avoid}".encode("utf-8"))
+    css = read_css(tmp)
+    assert not css.startswith("\ufeff"), "BOM 没被剥掉"
+    assert css.lstrip().startswith("body{"), css[:40]
+    # 真实样式文件本身也必须是干净的
+    assert not read_css().startswith("\ufeff")
+    return "utf-8-sig 生效"
+
+
+@case("报告摘要行：一眼看出 error 会不会拦")
+def _b5():
+    text = report(scan("√(b²-4ac)", profile="paper"), "x.md", profile="paper")
+    assert text.startswith("error "), text[:60]
+    assert "会拦截出 PDF" in text.splitlines()[0], text.splitlines()[0]
+    assert "不拦截，可改可不改" in text.splitlines()[0]
+
+    clean = report(scan("用时 ≥ 20 分钟。", profile="paper"), "y.md", profile="paper")
+    assert "不拦截" in clean.splitlines()[0], clean.splitlines()[0]
+    assert "error 0 处" in clean.splitlines()[0]
+    return clean.splitlines()[0]
+
+
+@case("Edge 出不来 PDF 时，报错带路径 + 目录可写性 + 全量 stderr")
+def _b6():
+    msg = _pdf_failure_message(OUT / "无.pdf", Path(tempfile.gettempdir()) / "kt_x",
+                               0, "Failed to write file /tmp/x.pdf\nsecond line")
+    assert "输出路径" in msg and "无.pdf" in msg, msg
+    assert "输出目录" in msg and ("可写" in msg or "不可写" in msg), msg
+    assert "exit=0" in msg, "必须保留退出码，exit=0 是最误导的那个信息"
+    assert "Failed to write" in msg, "stderr 要全量带上（原来截 600 字常常是空的）"
+    assert "second line" in msg, "stderr 多行都要带上"
+
+    empty = _pdf_failure_message(OUT / "无.pdf", Path("C:/x"), 0, "")
+    assert "stderr 是空的" in empty, "stderr 为空时要给出下一步，而不是空着"
+    return "路径 / 目录状态 / 全量 stderr 都在"
 
 
 def main() -> int:
